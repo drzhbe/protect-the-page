@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { isInRange } from "./base";
   import type { Id, Position } from "./types";
+  import { text } from "./texts/john1";
 
   let clientWidth = document.body.clientWidth;
   let clientHeight = document.body.clientHeight;
@@ -10,9 +11,19 @@
 
   let nextId = 0;
   let tick = 0;
-  let spawnFrequency = 5000;
+  let spawnFrequency = 10000;
   let waveSize = 10;
-  let creatureSpeed = 0.005; // 1px per tick
+  let creatureSpeed = 0.0005;
+
+  let waves = text
+    .split("\n")
+    .map((line) =>
+      line
+        .split(" ")
+        .flatMap((word) =>
+          word.split("\n").map((word) => word.replaceAll(/\W/g, ""))
+        )
+    );
 
   let magicPagePosition: Position = { x: clientWidth / 2, y: clientHeight / 2 };
   let magicPageRange = 100;
@@ -24,6 +35,7 @@
   let dirtyCreatures: Id[] = [];
   let countCollectedCreatures: Record<string, number> = {};
   let creaturesInRangeOfPlayer1: Record<Id, boolean> = {};
+  let hits: Record<Id, number> = {}; // How many letters in a word have been hit.
   let positions: Record<Id, Position> = {};
   let contents: Record<Id, string> = {};
 
@@ -95,7 +107,7 @@
 
       const { x, y } = player1Position;
       // Player range.
-      ctx.fillStyle = slate200;
+      ctx.fillStyle = `${slate200}33`;
       ctx.beginPath();
       ctx.arc(x, y, player1Range, 0, 2 * Math.PI);
       ctx.fill();
@@ -117,18 +129,43 @@
         const { x, y } = positions[id];
         const content = contents[id];
 
-        ctx.fillStyle = creaturesInRangeOfPlayer1[id]
-          ? `${slate500}55`
-          : `${slate200}55`;
-        ctx.beginPath();
-        ctx.arc(x, y, 30, 0, 2 * Math.PI);
-        ctx.fill();
+        // ctx.fillStyle = creaturesInRangeOfPlayer1[id]
+        //   ? `${slate500}55`
+        //   : `${slate200}55`;
+        // ctx.beginPath();
+        // ctx.arc(x, y, 30, 0, 2 * Math.PI);
+        // ctx.fill();
+        const w = ctx.measureText(content).width;
+        const h = 30;
+        const p = 4; // padding
 
-        ctx.fillStyle = creaturesInRangeOfPlayer1[id] ? slate200 : slate500;
-        ctx.font = "30px sans-serif";
+        // For creatures in range draw a background.
+        if (creaturesInRangeOfPlayer1[id]) {
+          ctx.fillStyle = slate500;
+          ctx.beginPath();
+          ctx.roundRect(x - w / 2 - p, y - h / 2 - p, w + p * 2, h + p * 2, 4);
+          ctx.fill();
+        }
+
+        const hitIndex = hits[id] || 0;
+        const hit = content.substring(0, hitIndex);
+        const rest = content.substring(hitIndex);
+
+        ctx.font = "30px monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(content, x, y);
+
+        const hitWidth = ctx.measureText(hit).width;
+        const restWidth = ctx.measureText(rest).width;
+        if (hitIndex) {
+          ctx.fillStyle = creaturesInRangeOfPlayer1[id]
+            ? `${slate200}55`
+            : `${slate500}55`;
+          ctx.fillText(hit, x - restWidth / 2, y);
+        }
+
+        ctx.fillStyle = creaturesInRangeOfPlayer1[id] ? slate200 : slate500;
+        ctx.fillText(rest, x + hitWidth / 2, y);
       }
 
       frame = requestAnimationFrame(render);
@@ -158,17 +195,29 @@
       );
     }, 16);
 
-    const spawnInterval = setInterval(() => {
-      for (let i = 0; i < waveSize; i++) {
-        const id = nextId++;
-        const x = Math.random() * canvas.width;
-        const y = Math.random() * canvas.height;
-        aliveCreatures.push(id);
+    const spawnCreatures = () => {
+      waves.shift()?.forEach((content) => {
+        const id = nextId;
+        nextId += 1;
+        const x = Math.random() * clientWidth;
+        const y = Math.random() * clientHeight;
         positions[id] = { x, y };
-        // contents[id] = "🐙";
-        contents[id] = String.fromCharCode(Math.floor(Math.random() * 26) + 97);
-      }
-    }, spawnFrequency);
+        contents[id] = content;
+        aliveCreatures = [...aliveCreatures, id];
+      });
+      // for (let i = 0; i < waveSize; i++) {
+      //   const id = nextId++;
+      //   const x = Math.random() * canvas.width;
+      //   const y = Math.random() * canvas.height;
+      //   aliveCreatures.push(id);
+      //   positions[id] = { x, y };
+      //   // contents[id] = "🐙";
+      //   contents[id] = String.fromCharCode(Math.floor(Math.random() * 26) + 97);
+      // }
+    };
+
+    spawnCreatures();
+    const spawnInterval = setInterval(spawnCreatures, spawnFrequency);
 
     const onMouseDown = (e: MouseEvent) => {
       const { x, y } = e;
@@ -185,13 +234,24 @@
         if (!creaturesInRangeOfPlayer1[id]) continue;
 
         const content = contents[id];
-        if (content === e.key) {
-          const index = aliveCreatures.indexOf(id);
-          aliveCreatures.splice(index, 1);
-          collectedCreatures = [...collectedCreatures, id];
-          delete creaturesInRangeOfPlayer1[id];
-          delete positions[id];
+        const char = content[hits[id] || 0].toLowerCase();
+        if (char === e.key) {
+          hits[id] = (hits[id] || 0) + 1;
+          if (hits[id] === content.length) {
+            collectedCreatures = [...collectedCreatures, id];
+            delete creaturesInRangeOfPlayer1[id];
+            delete positions[id];
+            delete hits[id];
+            const index = aliveCreatures.indexOf(id);
+            aliveCreatures.splice(index, 1);
+          }
           break;
+          // const index = aliveCreatures.indexOf(id);
+          // aliveCreatures.splice(index, 1);
+          // collectedCreatures = [...collectedCreatures, id];
+          // delete creaturesInRangeOfPlayer1[id];
+          // delete positions[id];
+          // break;
         }
       }
     };
@@ -212,7 +272,7 @@
 <main>
   <div class="magic-page">
     {#each dirtyCreatures as id}
-      {contents[id]}
+      <div>{contents[id]}</div>
     {/each}
   </div>
   <canvas bind:this={canvas} />
@@ -252,7 +312,10 @@
     height: 200px;
     display: flex;
     flex-wrap: wrap;
+    gap: 4px;
     word-break: break-word;
+    font-family: monospace;
+    color: var(--slate500);
   }
 
   .collection {

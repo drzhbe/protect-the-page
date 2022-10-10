@@ -28,8 +28,16 @@
   let magicPagePosition: Position = { x: clientWidth / 2, y: clientHeight / 2 };
   let magicPageRange = 100;
 
+  let player1IsMoving = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+  };
+
   let player1Position: Position = { x: 0, y: 0 };
   let player1Range = 150;
+  let player1Speed = 2; // px per tick
   let aliveCreatures: Id[] = [];
   let collectedCreatures: Id[] = [];
   let dirtyCreatures: Id[] = [];
@@ -174,6 +182,13 @@
     const eventLoopInterval = setInterval(() => {
       tick += 1;
 
+      // Move player.
+      player1IsMoving.up && (player1Position.y -= player1Speed);
+      player1IsMoving.down && (player1Position.y += player1Speed);
+      player1IsMoving.left && (player1Position.x -= player1Speed);
+      player1IsMoving.right && (player1Position.x += player1Speed);
+
+      // Move creatures.
       const target: Position = { x: clientWidth / 2, y: clientHeight / 2 };
       for (let id of aliveCreatures) {
         const { x, y } = positions[id];
@@ -205,15 +220,6 @@
         contents[id] = content;
         aliveCreatures = [...aliveCreatures, id];
       });
-      // for (let i = 0; i < waveSize; i++) {
-      //   const id = nextId++;
-      //   const x = Math.random() * canvas.width;
-      //   const y = Math.random() * canvas.height;
-      //   aliveCreatures.push(id);
-      //   positions[id] = { x, y };
-      //   // contents[id] = "🐙";
-      //   contents[id] = String.fromCharCode(Math.floor(Math.random() * 26) + 97);
-      // }
     };
 
     spawnCreatures();
@@ -228,36 +234,78 @@
         aliveCreatures
       );
     };
-    const onKeyDown = (e: KeyboardEvent) => {
-      for (const id_ in creaturesInRangeOfPlayer1) {
-        const id = Number(id_);
-        if (!creaturesInRangeOfPlayer1[id]) continue;
 
-        const content = contents[id];
-        const char = content[hits[id] || 0].toLowerCase();
-        if (char === e.key) {
-          hits[id] = (hits[id] || 0) + 1;
-          if (hits[id] === content.length) {
-            collectedCreatures = [...collectedCreatures, id];
-            delete creaturesInRangeOfPlayer1[id];
-            delete positions[id];
-            delete hits[id];
-            const index = aliveCreatures.indexOf(id);
-            aliveCreatures.splice(index, 1);
+    const onKeyDownMovePlayer = (e: KeyboardEvent) => {
+      if (e.keyCode >= 37 && e.keyCode <= 40) {
+        switch (e.key) {
+          case "ArrowUp":
+            player1IsMoving["up"] = true;
+            break;
+          case "ArrowDown":
+            player1IsMoving["down"] = true;
+            break;
+          case "ArrowLeft":
+            player1IsMoving["left"] = true;
+            break;
+          case "ArrowRight":
+            player1IsMoving["right"] = true;
+            break;
+        }
+
+        e.preventDefault();
+        return;
+      }
+    };
+    const onKeyUpMovePlayer = (e: KeyboardEvent) => {
+      if (e.keyCode >= 37 && e.keyCode <= 40) {
+        switch (e.key) {
+          case "ArrowUp":
+            player1IsMoving["up"] = false;
+            break;
+          case "ArrowDown":
+            player1IsMoving["down"] = false;
+            break;
+          case "ArrowLeft":
+            player1IsMoving["left"] = false;
+            break;
+          case "ArrowRight":
+            player1IsMoving["right"] = false;
+            break;
+        }
+
+        e.preventDefault();
+        return;
+      }
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.keyCode >= 65 && e.keyCode <= 90) {
+        for (const id_ in creaturesInRangeOfPlayer1) {
+          const id = Number(id_);
+          if (!creaturesInRangeOfPlayer1[id]) continue;
+
+          const content = contents[id];
+          const char = content[hits[id] || 0].toLowerCase();
+          if (char === e.key) {
+            hits[id] = (hits[id] || 0) + 1;
+            if (hits[id] === content.length) {
+              collectedCreatures = [...collectedCreatures, id];
+              delete creaturesInRangeOfPlayer1[id];
+              delete positions[id];
+              delete hits[id];
+              const index = aliveCreatures.indexOf(id);
+              aliveCreatures.splice(index, 1);
+            }
+            break;
           }
-          break;
-          // const index = aliveCreatures.indexOf(id);
-          // aliveCreatures.splice(index, 1);
-          // collectedCreatures = [...collectedCreatures, id];
-          // delete creaturesInRangeOfPlayer1[id];
-          // delete positions[id];
-          // break;
         }
       }
     };
 
     document.addEventListener("mousedown", onMouseDown);
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDownMovePlayer);
+    document.addEventListener("keyup", onKeyUpMovePlayer);
 
     return () => {
       clearInterval(spawnInterval);
@@ -265,6 +313,8 @@
       cancelAnimationFrame(frame);
       document.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDownMovePlayer);
+      document.removeEventListener("keyup", onKeyUpMovePlayer);
     };
   });
 </script>

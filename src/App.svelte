@@ -11,19 +11,35 @@
 
   let nextId = 0;
   let tick = 0;
-  let spawnFrequency = 10000;
-  let waveSize = 10;
+  let spawnFrequency = 6 * 10 * 1000;
+  let waveSize = 5;
   let creatureSpeed = 0.0005;
 
-  let waves = text
+  const textToSpeak = new SpeechSynthesisUtterance();
+  textToSpeak.rate = 0.1;
+  const speak = (text: string) => {
+    textToSpeak.text = text;
+    speechSynthesis.speak(textToSpeak);
+  };
+
+  const waves = text
     .split("\n")
     .map((line) =>
       line
         .split(" ")
         .flatMap((word) =>
-          word.split("\n").map((word) => word.replaceAll(/\W/g, ""))
+          word
+            .split("\n")
+            .map((word) => word.replaceAll(/\W/g, "").toUpperCase())
         )
-    );
+    )
+    .flatMap((wave) => {
+      const subwaves = [];
+      for (let i = 0; i < wave.length; i += waveSize) {
+        subwaves.push(wave.slice(i, i + waveSize));
+      }
+      return subwaves;
+    });
 
   let magicPagePosition: Position = { x: clientWidth / 2, y: clientHeight / 2 };
   let magicPageRange = 100;
@@ -208,10 +224,16 @@
         magicPageRange,
         aliveCreatures
       );
+
+      if (!aliveCreatures.length) {
+        spawnCreatures();
+      }
     }, 16);
 
+    let spawnTimeout: NodeJS.Timeout;
     const spawnCreatures = () => {
-      waves.shift()?.forEach((content) => {
+      const wave = waves.shift();
+      wave?.forEach((content) => {
         const id = nextId;
         nextId += 1;
         const x = Math.random() * clientWidth;
@@ -220,10 +242,11 @@
         contents[id] = content;
         aliveCreatures = [...aliveCreatures, id];
       });
+      clearTimeout(spawnTimeout);
+      spawnTimeout = setTimeout(spawnCreatures, spawnFrequency);
     };
 
     spawnCreatures();
-    const spawnInterval = setInterval(spawnCreatures, spawnFrequency);
 
     const onMouseDown = (e: MouseEvent) => {
       const { x, y } = e;
@@ -288,7 +311,12 @@
           const char = content[hits[id] || 0].toLowerCase();
           if (char === e.key) {
             hits[id] = (hits[id] || 0) + 1;
+
+            speak(char);
+
             if (hits[id] === content.length) {
+              speak(content);
+
               collectedCreatures = [...collectedCreatures, id];
               delete creaturesInRangeOfPlayer1[id];
               delete positions[id];
@@ -308,7 +336,7 @@
     document.addEventListener("keyup", onKeyUpMovePlayer);
 
     return () => {
-      clearInterval(spawnInterval);
+      clearTimeout(spawnTimeout);
       clearInterval(eventLoopInterval);
       cancelAnimationFrame(frame);
       document.removeEventListener("mousedown", onMouseDown);
